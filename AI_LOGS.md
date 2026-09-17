@@ -76,5 +76,22 @@ The submission requires all mandatory pieces to actually work when the evaluator
 You've got the 2.5-hour clock running — the setup steps above (repo → codespace → unzip → push) should take under 10 minutes, leaving you the rest of the time to verify it runs and to write your own testing notes.
 Parking garage
 
+Twists for this problem
+Level 1 — T4 (messy data): import a messy rate card (per spot type) with the junk below and price correctly from the cleaned rates.
+Level 2 — T2 (automation): “A nightly job auto-closes and bills any session parked over 24 h.” Graded via POST /clock.
+Level 3 — T6 (lifecycle): “Transfer an open session to a different plate (valet hand-off); spot and entry time carry over.”
+**
+this is the addition twist from my compamy
+i have built only this
+**The storyline
 
+A busy multi-level city-centre parking garage. Cars come and go all day, and the attendant needs to check a car in, check it out, and charge the right fee. Rates are tiered — the first hour is one price, each extra hour is cheaper, and there’s a daily cap so nobody is overcharged for a long stay; part-hours round up. Spots are limited and come in types — compact, standard, and EV (with a charger) — and an EV must get an EV spot. Drivers keep asking ‘is an EV spot free right now?’ and the attendant hunts for a car by its plate. By evening the log is huge.
+
+Build the attendant something so every car is charged correctly and no spot is double-parked.
+
+(The attendant’s day is the spec — build it for any garage, not one. Get check-in / check-out and the fee right first, then the spot types and lookups.)
+
+**
+
+’m adding the three twist requirements to your existing app and checking the exact API/UI changes needed so the project still behaves correctly.
 
