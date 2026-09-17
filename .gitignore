@@ -14,3 +14,4 @@ frontend/.angular/
 # OS/editor
 .DS_Store
 .vscode/
+.env
