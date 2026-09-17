@@ -70,3 +70,14 @@ Build the attendant something so every car is charged correctly and no spot is d
 
 ’m adding the three twist requirements to your existing app and checking the exact API/UI changes needed so the project still behaves correctly.
 
+City Centre Parking Garage — Attendant System is a full-stack parking management application built with FastAPI, SQLAlchemy, SQLite, and Angular 17. It enables attendants to manage vehicle check-ins/checkouts, assign appropriate parking spots, calculate tiered parking fees, track live availability, and search parking sessions. The application also includes JWT authentication, messy rate-card cleaning, automatic closure of sessions exceeding 24 hours, and valet plate-transfer functionality while preserving the original spot and entry time.
+
+generate READ.md
+
+
+The project was designed around the core parking requirements: vehicle check-in/check-out, tiered billing with daily caps, type-specific spot allocation, live availability, and efficient plate search. Key design choices include a modular billing system, SQLite persistence, JWT authentication, prevention of duplicate active sessions, and configurable garage layout/rates. The application was validated through manual API flow testing, direct billing tests across different parking durations, and Angular build/runtime checks.
+
+generate REASONING.md
+
+
+
