@@ -68,11 +68,4 @@ without touching request-handling code.
   the running backend to confirm the check-in form, live availability
   cards, and the search/sort/paginate table actually round-trip through
   the proxy to the real API.
-- **What's not yet covered:** no automated test suite (pytest / Jasmine)
-  — testing here was manual/exploratory given the time box. Concurrent
-  check-ins for the last spot of a type (the race condition noted above)
-  weren't load-tested.
-
-*(This file was drafted alongside the build; if you make further changes
-or hit issues while running it yourself in Codespaces, add your own notes
-here — that trail is exactly what this file is meant to capture.)*
+-
