@@ -45,6 +45,59 @@ import {
         <p *ngIf="checkInMsg" style="color:var(--ok); font-size:14px;">{{ checkInMsg }}</p>
       </div>
 
+      <div class="card">
+        <h2>Messy Rate Card Import</h2>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+          <button class="btn" type="button" (click)="importRateCard()">Import cleaned rates</button>
+        </div>
+        <div *ngIf="rateRows.length" style="display:flex; flex-wrap:wrap; gap:10px;">
+          <div *ngFor="let rate of rateRows" style="border:1px solid var(--border); border-radius:8px; padding:8px 12px; min-width:150px;">
+            <div style="font-weight:600; text-transform:uppercase; font-size:12px; color:#666;">{{ rate.spot_type }}</div>
+            <div>₹{{ rate.cleaned_rate }}/hr</div>
+          </div>
+        </div>
+      </div>
+
+     <div class="card">
+  <h2>Valet Plate Transfer</h2>
+
+  <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+    <select [(ngModel)]="transferSessionId" name="transferSessionId">
+      <option [ngValue]="null">Select active session</option>
+
+      <ng-container *ngFor="let s of sessions">
+        <option *ngIf="s.status === 'active'" [ngValue]="s.id">
+          {{ s.plate }} (#{{ s.id }})
+        </option>
+      </ng-container>
+
+    </select>
+
+    <input
+      type="text"
+      placeholder="New plate"
+      [(ngModel)]="transferPlate"
+      name="transferPlate"
+    >
+
+    <button
+      class="btn secondary"
+      type="button"
+      (click)="doTransfer()"
+    >
+      Transfer
+    </button>
+  </div>
+
+  <p *ngIf="transferError" class="error">
+    {{ transferError }}
+  </p>
+
+  <p *ngIf="transferSuccess" style="color:var(--ok); font-size:14px;">
+    {{ transferSuccess }}
+  </p>
+</div>
+
       <!-- Sessions: search, sort, paginate -->
       <div class="card">
         <h2>Parking Sessions</h2>
@@ -73,8 +126,8 @@ import {
             <tr *ngFor="let s of sessions">
               <td>{{ s.plate }}</td>
               <td>#{{ s.spot_id }} ({{ s.vehicle_type }})</td>
-              <td>{{ s.check_in_time | date:'short' }}</td>
-              <td>{{ s.check_out_time ? (s.check_out_time | date:'short') : '—' }}</td>
+              <td>{{ formatStamp(s.check_in_time) }}</td>
+              <td>{{ s.check_out_time ? formatStamp(s.check_out_time) : '—' }}</td>
               <td>{{ s.fee !== null ? ('₹' + s.fee) : '—' }}</td>
               <td><span class="badge" [ngClass]="s.status">{{ s.status }}</span></td>
               <td>
@@ -103,6 +156,7 @@ import {
 })
 export class DashboardComponent implements OnInit {
   availability: SpotAvailability[] = [];
+  rateRows: Array<{ id: number; spot_type: string; rate_per_hour: number; cleaned_rate: number; raw: string | null }> = [];
 
   checkInPlate = '';
   checkInType = 'standard';
@@ -118,6 +172,15 @@ export class DashboardComponent implements OnInit {
   sortOrder: 'asc' | 'desc' = 'desc';
   searchPlate = '';
   statusFilter = '';
+  transferSessionId: number | null = null;
+  transferPlate = '';
+  transferError = '';
+  transferSuccess = '';
+  rateImportRows = [
+    { spot_type: 'compact', raw: 'compact | ₹ 80 / hour | junk 99' },
+    { spot_type: 'standard', raw: 'standard || 120 per hr // old rate' },
+    { spot_type: 'ev', raw: 'EV | 150/hr | out of order' },
+  ];
   private searchTimer: any;
 
   constructor(private parking: ParkingService) {}
@@ -125,10 +188,15 @@ export class DashboardComponent implements OnInit {
   ngOnInit() {
     this.loadAvailability();
     this.loadSessions();
+    this.loadRates();
   }
 
   loadAvailability() {
     this.parking.getAvailability().subscribe((res) => (this.availability = res));
+  }
+
+  loadRates() {
+    this.parking.getRates().subscribe((res) => (this.rateRows = res));
   }
 
   loadSessions() {
@@ -174,6 +242,19 @@ export class DashboardComponent implements OnInit {
     return Math.max(1, Math.ceil(this.total / this.pageSize));
   }
 
+  formatStamp(value: string | null): string {
+    if (!value) return '—';
+
+    const normalized = value.includes('Z') || value.includes('+') ? value : `${value}Z`;
+    const date = new Date(normalized);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return new Intl.DateTimeFormat('en-IN', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    }).format(date);
+  }
+
   changePage(p: number) {
     if (p < 1 || p > this.totalPages()) return;
     this.page = p;
@@ -206,6 +287,35 @@ export class DashboardComponent implements OnInit {
         this.loadSessions();
       },
       error: (err) => alert(err?.error?.detail || 'Check-out failed'),
+    });
+  }
+
+  importRateCard() {
+    this.parking.importRates(this.rateImportRows).subscribe({
+      next: (res) => {
+        this.rateRows = res.rates;
+      },
+      error: (err) => alert(err?.error?.detail || 'Rate import failed'),
+    });
+  }
+
+  doTransfer() {
+    if (!this.transferSessionId || !this.transferPlate.trim()) {
+      this.transferError = 'Choose a session and enter a new plate.';
+      return;
+    }
+    this.transferError = '';
+    this.transferSuccess = '';
+    this.parking.transferSession(this.transferSessionId, this.transferPlate.trim()).subscribe({
+      next: (session) => {
+        this.transferSuccess = `Session ${session.id} transferred to ${session.plate}.`;
+        this.transferSessionId = null;
+        this.transferPlate = '';
+        this.loadSessions();
+      },
+      error: (err) => {
+        this.transferError = err?.error?.detail || 'Transfer failed';
+      },
     });
   }
 }

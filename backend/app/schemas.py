@@ -69,6 +69,33 @@ class CheckOutResponse(BaseModel):
     hours_charged: int
 
 
+class RateImportRow(BaseModel):
+    spot_type: SpotType
+    raw: str
+
+
+class RateImportRequest(BaseModel):
+    rows: List[RateImportRow]
+
+
+class SpotRateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    spot_type: SpotType
+    rate_per_hour: float
+    cleaned_rate: float
+    raw: Optional[str]
+
+
+class RateImportResponse(BaseModel):
+    count: int
+    rates: List[SpotRateOut]
+
+
+class TransferSessionRequest(BaseModel):
+    new_plate: str
+
+
 class PaginatedSessions(BaseModel):
     items: List[SessionOut]
     total: int

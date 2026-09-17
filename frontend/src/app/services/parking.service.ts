@@ -42,6 +42,18 @@ export class ParkingService {
     return this.http.get<SpotAvailability[]>('/api/spots/availability');
   }
 
+  getRates(): Observable<{ id: number; spot_type: string; rate_per_hour: number; cleaned_rate: number; raw: string | null }[]> {
+    return this.http.get<{ id: number; spot_type: string; rate_per_hour: number; cleaned_rate: number; raw: string | null }[]>('/api/rates');
+  }
+
+  importRates(rows: { spot_type: string; raw: string }[]): Observable<{ count: number; rates: any[] }> {
+    return this.http.post<{ count: number; rates: any[] }>('/api/rates/import', { rows });
+  }
+
+  transferSession(sessionId: number, newPlate: string): Observable<ParkingSession> {
+    return this.http.post<ParkingSession>(`/api/sessions/${sessionId}/transfer`, { new_plate: newPlate });
+  }
+
   getSpots(opts: {
     type?: string;
     available_only?: boolean;

@@ -41,6 +41,17 @@ class Spot(Base):
     sessions = relationship("ParkingSession", back_populates="spot")
 
 
+class SpotRate(Base):
+    __tablename__ = "spot_rates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    spot_type = Column(Enum(SpotType), unique=True, nullable=False, index=True)
+    rate_per_hour = Column(Float, nullable=False)
+    cleaned_rate = Column(Float, nullable=False)
+    raw = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
 class ParkingSession(Base):
     __tablename__ = "parking_sessions"
 

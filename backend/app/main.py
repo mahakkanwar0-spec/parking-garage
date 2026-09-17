@@ -1,4 +1,5 @@
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import FastAPI, Depends, HTTPException, Query, status
@@ -9,6 +10,19 @@ from sqlalchemy.orm import Session
 
 from . import models, schemas, auth
 from .database import engine, get_db, Base
+
+
+def clean_rate_value(raw_text: str) -> Optional[float]:
+    if raw_text is None:
+        return None
+    text = raw_text.lower()
+    matches = re.findall(r"\d+(?:\.\d+)?", raw_text)
+    if not matches:
+        return None
+    if any(token in text for token in ["per hr", "per hour", "/hr", "/ hour", "hour", "hr"]):
+        return float(matches[0])
+    return float(matches[0])
+
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -116,6 +130,43 @@ def spot_availability(db: Session = Depends(get_db), current_user: models.User =
     return results
 
 
+@app.get("/api/rates", response_model=list[schemas.SpotRateOut], tags=["rates"])
+def list_rates(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    return db.query(models.SpotRate).order_by(models.SpotRate.spot_type).all()
+
+
+@app.post("/api/rates/import", response_model=schemas.RateImportResponse, tags=["rates"])
+def import_rates(
+    payload: schemas.RateImportRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    cleaned_rows = []
+    for row in payload.rows:
+        cleaned = clean_rate_value(row.raw)
+        if cleaned is None:
+            raise HTTPException(status_code=400, detail=f"Unable to read a valid rate for {row.spot_type.value}")
+        record = db.query(models.SpotRate).filter(models.SpotRate.spot_type == row.spot_type).first()
+        if record is None:
+            record = models.SpotRate(spot_type=row.spot_type, rate_per_hour=cleaned, cleaned_rate=cleaned, raw=row.raw)
+            db.add(record)
+        else:
+            record.rate_per_hour = cleaned
+            record.cleaned_rate = cleaned
+            record.raw = row.raw
+            record.updated_at = datetime.utcnow()
+        db.flush()
+        cleaned_rows.append({
+            "id": record.id,
+            "spot_type": record.spot_type,
+            "rate_per_hour": record.rate_per_hour,
+            "cleaned_rate": record.cleaned_rate,
+            "raw": record.raw,
+        })
+    db.commit()
+    return {"count": len(cleaned_rows), "rates": cleaned_rows}
+
+
 # ------------------------------------------------------------------
 # Check-in / Check-out
 # ------------------------------------------------------------------
@@ -205,6 +256,48 @@ def get_session(session_id: int, db: Session = Depends(get_db), current_user: mo
     session = db.query(models.ParkingSession).filter(models.ParkingSession.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    return session
+
+
+@app.post("/api/clock", tags=["automation"])
+def auto_close_overdue_sessions(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    """Nightly job: close any active session parked more than 24 hours."""
+    now = datetime.utcnow()
+    sessions = db.query(models.ParkingSession).filter(models.ParkingSession.status == models.SessionStatus.active).all()
+    closed_sessions = []
+    for session in sessions:
+        if now - session.check_in_time >= timedelta(hours=24):
+            session.check_out_time = now
+            session.status = models.SessionStatus.completed
+            from .billing import calculate_fee
+            fee, _ = calculate_fee(session.check_in_time, session.check_out_time)
+            session.fee = fee
+            spot = db.query(models.Spot).filter(models.Spot.id == session.spot_id).first()
+            if spot:
+                spot.is_occupied = False
+            closed_sessions.append(session)
+    db.commit()
+    return {"closed": len(closed_sessions), "sessions": closed_sessions}
+
+
+@app.post("/api/sessions/{session_id}/transfer", response_model=schemas.SessionOut, tags=["sessions"])
+def transfer_session(
+    session_id: int,
+    payload: schemas.TransferSessionRequest,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    session = db.query(models.ParkingSession).filter(models.ParkingSession.id == session_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.status != models.SessionStatus.active:
+        raise HTTPException(status_code=400, detail="Only active sessions can be transferred")
+    new_plate = payload.new_plate.strip()
+    if not new_plate:
+        raise HTTPException(status_code=400, detail="New plate is required")
+    session.plate = new_plate
+    db.commit()
+    db.refresh(session)
     return session
 
 

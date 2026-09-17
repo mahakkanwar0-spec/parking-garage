@@ -6,6 +6,12 @@ standard / EV-with-charger) from ever being double-parked, and let the
 attendant answer "is an EV spot free right now?" or "where's plate XYZ?" in
 one glance.
 
+This project also includes the required twist features:
+- messy rate-card import and cleaning
+- nightly auto-close of sessions parked more than 24 hours
+- valet hand-off transfer of an open session to a new plate while keeping the
+  same spot and entry time
+
 - **Backend:** FastAPI + SQLAlchemy + SQLite, JWT auth
 - **Frontend:** Angular 17 (standalone components)
 
@@ -15,19 +21,20 @@ one glance.
 parking-garage/
   backend/
     app/
-      main.py         # all API routes
-      models.py        # SQLAlchemy models (User, Spot, ParkingSession)
+      main.py         # API routes, twist endpoints, garage seeding
+      models.py        # SQLAlchemy models (User, Spot, SpotRate, ParkingSession)
       schemas.py        # Pydantic request/response models
       auth.py           # JWT + password hashing
-      billing.py         # tiered fee calculation (see "Billing rules" below)
+      billing.py         # tiered fee calculation
       database.py        # SQLite engine/session
     requirements.txt
+    test_twists.py       # verification for the three twist scenarios
   frontend/
     src/app/
-      components/landing   # public landing page (product overview)
+      components/landing   # public landing page
       components/login
       components/register
-      components/dashboard # check-in, live availability, search/sort/paginate sessions
+      components/dashboard # check-in, live availability, search/sort/paginate sessions, twist functions
       services/             # auth.service, parking.service, auth.interceptor
       guards/                # route guard for /dashboard
 ```
@@ -39,12 +46,12 @@ schema (not an in-memory dict). The file `backend/parking.db` is created
 automatically the first time the backend starts (`Base.metadata.create_all`
 in `main.py`), and a 3-level garage (8 compact + 8 standard + 2 EV spots per
 level) is seeded automatically on first boot. No separate install/service is
-needed — this is exactly why SQLite is a good fit for a Codespaces demo: zero
-setup, still a real relational schema with foreign keys
-(`parking_sessions.spot_id → spots.id`) you can inspect with any SQLite
-browser or `sqlite3 backend/parking.db`.
+needed — this is exactly why SQLite is a good fit for Codespaces: zero setup,
+while still being a real relational schema with foreign keys
+(`parking_sessions.spot_id → spots.id`) and the added `spot_rates` table for the
+messy rate-card twist.
 
-Tables: `users`, `spots`, `parking_sessions`.
+Tables: `users`, `spots`, `spot_rates`, `parking_sessions`.
 
 ## Setup & run (GitHub Codespaces)
 
@@ -81,8 +88,9 @@ the forwarded port-4200 URL in the browser.
 
 1. Open the app → **Register** an attendant account → **Login**.
 2. On the dashboard: check a plate in (pick compact / standard / EV), watch
-   live availability drop, search/sort the sessions table, and check the car
-   back out to see the computed fee.
+   live availability drop, search/sort the sessions table, import a messy rate
+   card, transfer an active session to a new plate, and check the car back out
+   to see the computed fee.
 
 ## Debugging tips
 
@@ -120,10 +128,38 @@ All routes except `/api/auth/register` and `/api/auth/login` require
 | GET | `/api/auth/me` | Current logged-in user |
 | GET | `/api/spots` | List spots — filter by `type`, `level`, `available_only`; paginate (`page`, `page_size`); sort (`sort_by`, `order`) |
 | GET | `/api/spots/availability` | Free/total count per spot type — answers "is an EV spot free right now?" |
+| GET | `/api/rates` | View cleaned/active hourly rates by spot type |
+| POST | `/api/rates/import` | Import messy raw rate-card rows and clean them into valid numeric rates |
 | POST | `/api/checkin` | `{ plate, vehicle_type }` → assigns a free spot of the matching type (EV always gets an EV spot), creates a session |
 | POST | `/api/checkout/{session_id}` | Closes the session, computes the tiered fee, frees the spot |
+| POST | `/api/clock` | Auto-close and bill any active session parked more than 24 hours |
+| POST | `/api/sessions/{session_id}/transfer` | Transfer an open session to a different plate while preserving the spot and original entry time |
 | GET | `/api/sessions` | Search/list sessions — `plate` (partial match), `status`; paginate; sort by `check_in_time`, `check_out_time`, `fee`, or `plate` |
 | GET | `/api/sessions/{id}` | Single session detail |
 | GET | `/api/health` | Health check |
 
 Full interactive docs: `http://localhost:8000/docs`.
+
+## Twist implementation summary
+
+### 1. Messy rate card import (Level 1)
+A messy raw rate row such as `compact | ₹ 80 / hour | junk 99` is cleaned by
+extracting the numeric rate and storing it as a normalized per-hour value in the
+`spot_rates` table. The backend rejects invalid entries clearly instead of
+silently accepting them.
+
+### 2. Nightly auto-close job (Level 2)
+The `POST /api/clock` endpoint scans all active sessions. Any session parked for
+more than 24 hours is closed automatically, the spot is released, and the fee is
+calculated and stored before returning the session list.
+
+### 3. Valet transfer / lifecycle (Level 3)
+The `POST /api/sessions/{session_id}/transfer` endpoint changes only the plate
+for an active session. The spot assignment and check-in timestamp remain intact,
+which matches the requested hand-off behaviour.
+
+## Submission notes
+
+This project was built to satisfy the Round 2 builder brief: a working full-stack
+parking garage app with authentication, search, pagination, sorting, billing,
+spot-type rules, live availability, and the three required twist features.
